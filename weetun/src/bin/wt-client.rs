@@ -74,7 +74,7 @@ async fn main() {
         match socket.bind_device(Some(interface.as_bytes())) {
             Ok(()) => {}
             Err(e) =>  {
-                debug_println!("WARN: interface {} failed: {:?}", interface, e);
+                println!("WARN: interface {} failed: {:?}", interface, e);
                 continue;
             },
         }
@@ -82,7 +82,7 @@ async fn main() {
         socket.connect(&server_ip_port.into()).unwrap();
 
         let socket = Arc::new(UdpSocket::from_std(socket.into()).unwrap());
-        debug_println!("udp socket opened for {}: {:?}", interface, socket.local_addr().unwrap());
+        println!("udp socket opened for {}: {:?}", interface, socket.local_addr().unwrap());
         udp_sockets.push((interface, socket.clone()));
 
         let tun_writer_clone = tun_writer.clone();
@@ -112,11 +112,11 @@ async fn main() {
 
                         match tun_writer_clone.lock().await.write(&buf[8..n]).await {
                             Ok(_) => debug_println!("wrote {} bytes to tun", n),
-                            Err(e) => debug_println!("FAILED To write {} bytes to tun: {:?}", n, e)
+                            Err(e) => println!("FAILED To write {} bytes to tun: {:?}", n, e)
                         }
                     }
                     Err(e) => {
-                        debug_println!("WARN: socket recv error: {:?}", e);
+                        println!("WARN: socket recv error: {:?}", e);
                     }
                 }
             }
@@ -148,7 +148,7 @@ async fn main() {
                     let _ = socket.connect(server_ip_port).await;
                 }
                 Err(e) => {
-                    debug_println!("WARN: socket send error: {:?}", e);
+                    println!("WARN: socket send error: {:?}", e);
                 }
             }
         }
