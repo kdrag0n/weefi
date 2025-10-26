@@ -15,6 +15,7 @@ async fn main() {
 
     let tun = Tun::builder()
         .name("tunS")
+        .packet_info()
         .up()
         .close_on_exec()
         .address(Ipv4Addr::new(10, 6, 6, 1))
@@ -29,8 +30,13 @@ async fn main() {
 
     std::fs::write(format!("/proc/sys/net/ipv6/conf/{}/disable_ipv6", tun.name()), "1").unwrap();
 
-    // iptables -I FORWARD -i tunS -j ACCEPT
-    // iptables -t nat -I POSTROUTING -s 10.6.6.0/24 -o eth0 -j MASQUERADE
+    Command::new("iptables")
+        .args(["-I", "FORWARD", "-i", tun.name(), "-j", "ACCEPT"])
+        .output().unwrap();
+
+    Command::new("iptables")
+        .args(["-t", "nat", "-I", "POSTROUTING", "-s", "10.6.6.0/24", "-o", "eth0", "-j", "MASQUERADE"])
+        .output().unwrap();
 
     let (mut tun_reader, mut tun_writer) = tokio::io::split(tun);
 
