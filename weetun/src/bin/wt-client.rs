@@ -33,6 +33,7 @@ macro_rules! debug_println {
 #[cfg(not(debug_assertions))]
 macro_rules! debug_println {
     ($($args:tt)*) => {
+        ()
     };
 }
 
