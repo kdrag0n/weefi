@@ -72,6 +72,10 @@ async fn main() {
             loop {
                 match socket.recv(&mut buf).await {
                     Ok(n) => {
+                        for i in 0..n {
+                            buf[i] ^= 0x55;
+                        }
+
                         println!("received {} bytes on interface {}: {:?}", n, interface, &buf[..n]);
 
                         match tun_writer_clone.lock().await.write(&buf[..n]).await {

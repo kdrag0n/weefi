@@ -52,6 +52,10 @@ async fn main() {
                 last_time: Instant::now()
             });
 
+            for i in 0..n {
+                buf[i] ^= 0x55;
+            }
+
             match tun_writer.write(&buf[..n]).await {
                 Ok(_) => println!("wrote {} bytes from {:?} to tun", n, addr),
                 Err(e) => println!("FAILED To write {} bytes from {:?} to tun: {:?}", n, addr, e)
