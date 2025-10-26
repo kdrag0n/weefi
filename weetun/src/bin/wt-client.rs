@@ -129,7 +129,7 @@ async fn main() {
     let mut packet_id: u64 = 0;
     loop {
         let n = tun_reader.read(&mut buf[8..]).await.unwrap();
-        debug_println!("reading {} bytes: {:?}", n, &buf[8..n]);
+        debug_println!("reading {} bytes: {:?}", n, &buf[8..n+8]);
 
         buf[0..8].copy_from_slice(&packet_id.to_le_bytes());
         packet_id += 1;
@@ -140,9 +140,9 @@ async fn main() {
         }
 
         for (interface_name, socket) in &udp_sockets {
-            match socket.send(&buf[..n]).await {
+            match socket.send(&buf[..n+8]).await {
                 Ok(n) => {
-                    debug_println!("sent {} bytes with packet id {} on interface {}: {:?}", n, packet_id, interface_name, &buf[..n]);
+                    debug_println!("sent {} bytes with packet id {} on interface {}: {:?}", n, packet_id, interface_name, &buf[..n+8]);
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::NetworkUnreachable => {
                     // just try to reconnect as much as we can
