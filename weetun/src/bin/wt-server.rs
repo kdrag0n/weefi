@@ -116,7 +116,7 @@ async fn main() {
             }
 
             match udp_listener.send_to(&buf[..n], addr).await {
-                Ok(n) => debug_println!("sent {} bytes to {:?}", n, addr),
+                Ok(n) => debug_println!("sent {} bytes with packet id {} to {:?}", n, packet_id, addr),
                 Err(e) => println!("FAILED To send {} bytes to {:?}: {:?}", n, addr, e)
             }
         }
