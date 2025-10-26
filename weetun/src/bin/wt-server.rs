@@ -34,6 +34,7 @@ async fn main() {
         .args(["-I", "FORWARD", "-i", tun.name(), "-j", "ACCEPT"])
         .output().unwrap();
 
+    // iptables -t nat -I POSTROUTING -s 10.6.6.0/24 -o wgcal -j MASQUERADE
     Command::new("iptables")
         .args(["-t", "nat", "-I", "POSTROUTING", "-s", "10.6.6.0/24", "-o", "eth0", "-j", "MASQUERADE"])
         .output().unwrap();
