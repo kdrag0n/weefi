@@ -97,8 +97,16 @@ async fn main() {
     let mut buf = [0u8; 2048];
     let mut packet_id: u64 = 0;
     loop {
-        let n = tun_reader.read(&mut buf).await.unwrap();
-        debug_println!("reading {} bytes: {:?}", n, &buf[..n]);
+        let n = tun_reader.read(&mut buf[8..]).await.unwrap();
+        debug_println!("reading {} bytes: {:?}", n, &buf[8..n+8]);
+
+        buf[0..8].copy_from_slice(&packet_id.to_le_bytes());
+        packet_id += 1;
+
+        // encrypt
+        for i in 0..n {
+            buf[i] ^= 0x55;
+        }
 
         // send it to every active conn 
         let map = active_connections.lock().await;
@@ -107,15 +115,7 @@ async fn main() {
                 continue;
             }
 
-            buf[0..8].copy_from_slice(&packet_id.to_le_bytes());
-            packet_id += 1;
-
-            // encrypt
-            for i in 0..n {
-                buf[i] ^= 0x55;
-            }
-
-            match udp_listener.send_to(&buf[..n], addr).await {
+            match udp_listener.send_to(&buf[..n+8], addr).await {
                 Ok(n) => debug_println!("sent {} bytes with packet id {} to {:?}", n, packet_id, addr),
                 Err(e) => println!("FAILED To send {} bytes to {:?}: {:?}", n, addr, e)
             }
