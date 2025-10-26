@@ -27,7 +27,6 @@ async fn main() {
 
     let tun = Tun::builder()
         .name("tunC")
-        .packet_info()
         .up()
         .close_on_exec()
         .address(Ipv4Addr::new(10, 6, 6, 2))
@@ -93,6 +92,10 @@ async fn main() {
     loop {
         let n = tun_reader.read(&mut buf).await.unwrap();
         println!("reading {} bytes: {:?}", n, &buf[..n]);
+
+        for i in 0..n {
+            buf[i] ^= 0x55;
+        }
 
         for (interface_name, socket) in &udp_sockets {
             match socket.send(&buf[..n]).await {
