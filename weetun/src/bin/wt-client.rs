@@ -1,4 +1,4 @@
-use std::{net::{Ipv4Addr, SocketAddr, SocketAddrV4}, process::Command, sync::Arc};
+use std::{collections::BTreeSet, net::{Ipv4Addr, SocketAddr, SocketAddrV4}, process::Command, sync::Arc};
 use socket2::{Domain, SockAddr, Type};
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::UdpSocket, sync::Mutex};
 use tokio_tun::Tun;
@@ -23,6 +23,19 @@ const INTERFACES: &[&str] = &[
     "wlx289401b7a3cd",
 ];
 
+#[cfg(debug_assertions)]
+macro_rules! debug_println {
+    ($($args:tt)*) => {
+        println!($($args)*)
+    };
+}
+
+#[cfg(not(debug_assertions))]
+macro_rules! debug_println {
+    ($($args:tt)*) => {
+    };
+}
+
 #[tokio::main]
 async fn main() {
     let args = std::env::args().collect::<Vec<_>>();
@@ -41,7 +54,7 @@ async fn main() {
         .pop()
         .unwrap();
 
-    println!("tun created: {:?}", tun.name());
+    debug_println!("tun created: {:?}", tun.name());
 
     std::fs::write(format!("/proc/sys/net/ipv6/conf/{}/disable_ipv6", tun.name()), "1").unwrap();
 
@@ -52,6 +65,8 @@ async fn main() {
     let (mut tun_reader, tun_writer) = tokio::io::split(tun);
     let tun_writer = Arc::new(Mutex::new(tun_writer));
 
+    let  received_ids = Arc::new(Mutex::new(BTreeSet::<u64>::new()));
+
     // open udp socket for each interface
     let mut udp_sockets = Vec::new();
     for interface in INTERFACES {
@@ -59,7 +74,7 @@ async fn main() {
         match socket.bind_device(Some(interface.as_bytes())) {
             Ok(()) => {}
             Err(e) =>  {
-                println!("WARN: interface {} failed: {:?}", interface, e);
+                debug_println!("WARN: interface {} failed: {:?}", interface, e);
                 continue;
             },
         }
@@ -67,28 +82,41 @@ async fn main() {
         socket.connect(&server_ip_port.into()).unwrap();
 
         let socket = Arc::new(UdpSocket::from_std(socket.into()).unwrap());
-        println!("udp socket opened for {}: {:?}", interface, socket.local_addr().unwrap());
+        debug_println!("udp socket opened for {}: {:?}", interface, socket.local_addr().unwrap());
         udp_sockets.push((interface, socket.clone()));
 
         let tun_writer_clone = tun_writer.clone();
+        let received_ids_clone = received_ids.clone();
         tokio::spawn(async move {
             let mut buf = [0u8; 2048];
             loop {
                 match socket.recv(&mut buf).await {
                     Ok(n) => {
+                        // decrypt
                         for i in 0..n {
                             buf[i] ^= 0x55;
                         }
 
-                        println!("received {} bytes on interface {}: {:?}", n, interface, &buf[..n]);
+                        let id_bytes = buf[0..8].try_into().unwrap();
+                        let id = u64::from_le_bytes(id_bytes);
+                        if id == 0 {
+                            received_ids_clone.lock().await.clear();
+                        }
+                        if received_ids_clone.lock().await.contains(&id) {
+                            continue;
+                        }
+                
+                        received_ids_clone.lock().await.insert(id);
 
-                        match tun_writer_clone.lock().await.write(&buf[..n]).await {
-                            Ok(_) => println!("wrote {} bytes to tun", n),
-                            Err(e) => println!("FAILED To write {} bytes to tun: {:?}", n, e)
+                        debug_println!("received {} bytes on interface {}: {:?}", n, interface, &buf[8..n]);
+
+                        match tun_writer_clone.lock().await.write(&buf[8..n]).await {
+                            Ok(_) => debug_println!("wrote {} bytes to tun", n),
+                            Err(e) => debug_println!("FAILED To write {} bytes to tun: {:?}", n, e)
                         }
                     }
                     Err(e) => {
-                        println!("WARN: socket recv error: {:?}", e);
+                        debug_println!("WARN: socket recv error: {:?}", e);
                     }
                 }
             }
@@ -97,10 +125,15 @@ async fn main() {
 
     // reader
     let mut buf = [0u8; 2048];
+    let mut packet_id: u64 = 0;
     loop {
-        let n = tun_reader.read(&mut buf).await.unwrap();
-        println!("reading {} bytes: {:?}", n, &buf[..n]);
+        let n = tun_reader.read(&mut buf[8..]).await.unwrap();
+        debug_println!("reading {} bytes: {:?}", n, &buf[8..n]);
 
+        buf[0..8].copy_from_slice(&packet_id.to_le_bytes());
+        packet_id += 1;
+
+        // encrypt
         for i in 0..n {
             buf[i] ^= 0x55;
         }
@@ -108,14 +141,14 @@ async fn main() {
         for (interface_name, socket) in &udp_sockets {
             match socket.send(&buf[..n]).await {
                 Ok(n) => {
-                    println!("sent {} bytes on interface {}: {:?}", n, interface_name, &buf[..n]);
+                    debug_println!("sent {} bytes on interface {}: {:?}", n, interface_name, &buf[..n]);
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::NetworkUnreachable => {
                     // just try to reconnect as much as we can
                     let _ = socket.connect(server_ip_port).await;
                 }
                 Err(e) => {
-                    println!("WARN: socket send error: {:?}", e);
+                    debug_println!("WARN: socket send error: {:?}", e);
                 }
             }
         }
