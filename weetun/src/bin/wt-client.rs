@@ -7,6 +7,9 @@ const INTERFACES: &[&str] = &[
     // on orbstack test
     "eth0",
 
+    // nils test
+    "wlp1s0",
+
     // tp-link AX, RTL8852AU
     "wlxe0d36283eaa9",
     "wlxe0d3621c0cc6",
@@ -106,6 +109,10 @@ async fn main() {
             match socket.send(&buf[..n]).await {
                 Ok(n) => {
                     println!("sent {} bytes on interface {}: {:?}", n, interface_name, &buf[..n]);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NetworkUnreachable => {
+                    // just try to reconnect as much as we can
+                    let _ = socket.connect(server_ip_port).await;
                 }
                 Err(e) => {
                     println!("WARN: socket send error: {:?}", e);
