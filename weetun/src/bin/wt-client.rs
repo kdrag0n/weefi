@@ -142,7 +142,7 @@ async fn main() {
         for (interface_name, socket) in &udp_sockets {
             match socket.send(&buf[..n]).await {
                 Ok(n) => {
-                    debug_println!("sent {} bytes on interface {}: {:?}", n, interface_name, &buf[..n]);
+                    debug_println!("sent {} bytes with packet id {} on interface {}: {:?}", n, packet_id, interface_name, &buf[..n]);
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::NetworkUnreachable => {
                     // just try to reconnect as much as we can
