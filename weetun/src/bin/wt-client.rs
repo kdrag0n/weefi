@@ -54,7 +54,7 @@ async fn main() {
         .pop()
         .unwrap();
 
-    debug_println!("tun created: {:?}", tun.name());
+    println!("tun created: {:?}", tun.name());
 
     std::fs::write(format!("/proc/sys/net/ipv6/conf/{}/disable_ipv6", tun.name()), "1").unwrap();
 
@@ -103,12 +103,13 @@ async fn main() {
                             received_ids_clone.lock().await.clear();
                         }
                         if received_ids_clone.lock().await.contains(&id) {
+                            debug_println!("received duplicate packet id {} on interface {}: {:?}", id, interface, &buf[8..n]);
                             continue;
                         }
                 
                         received_ids_clone.lock().await.insert(id);
 
-                        debug_println!("received {} bytes on interface {}: {:?}", n, interface, &buf[8..n]);
+                        debug_println!("received {} bytes with packet id {} on interface {}: {:?}", n, id, interface, &buf[8..n]);
 
                         match tun_writer_clone.lock().await.write(&buf[8..n]).await {
                             Ok(_) => debug_println!("wrote {} bytes to tun", n),
