@@ -69,10 +69,6 @@ async fn main() {
                 last_time: Instant::now()
             });
 
-            for i in 0..n {
-                buf[i] ^= 0x55;
-            }
-
             let id_bytes = buf[0..8].try_into().unwrap();
             let id = u64::from_le_bytes(id_bytes);
             if id == 0 {
@@ -102,11 +98,6 @@ async fn main() {
 
         buf[0..8].copy_from_slice(&packet_id.to_le_bytes());
         packet_id += 1;
-
-        // encrypt
-        for i in 0..n {
-            buf[i] ^= 0x55;
-        }
 
         // send it to every active conn 
         let map = active_connections.lock().await;
