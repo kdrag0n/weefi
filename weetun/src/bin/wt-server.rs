@@ -67,6 +67,10 @@ async fn main() {
                 continue;
             }
 
+            for i in 0..n {
+                buf[i] ^= 0x55;
+            }
+
             match udp_listener.send_to(&buf[..n], addr).await {
                 Ok(n) => println!("sent {} bytes to {:?}", n, addr),
                 Err(e) => println!("FAILED To send {} bytes to {:?}: {:?}", n, addr, e)
