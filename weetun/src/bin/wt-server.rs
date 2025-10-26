@@ -109,6 +109,9 @@ async fn main() {
                 }
                 conns_buf.push(*addr);
             }
+            if conns_buf.is_empty() {
+                continue;
+            }
             let addr = conns_buf[packet_id as usize % conns_buf.len()];
             match udp_listener.send_to(&buf[..n+8], addr).await {
                 Ok(n) => debug_println!("sent {} bytes with packet id {} to {:?}", n, packet_id, addr),
