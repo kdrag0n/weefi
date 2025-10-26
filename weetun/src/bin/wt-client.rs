@@ -27,7 +27,6 @@ async fn main() {
 
     let tun = Tun::builder()
         .name("tunC")
-        .packet_info()
         .up()
         .close_on_exec()
         .address(Ipv4Addr::new(10, 6, 6, 2))

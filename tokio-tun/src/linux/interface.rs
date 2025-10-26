@@ -37,9 +37,13 @@ impl Interface {
         if fds.len() > 1 {
             flags |= libc::IFF_MULTI_QUEUE as i16;
         }
-        req.ifr_ifru.ifru_flags = flags;
+        req.ifr_ifru.ifru_flags = flags | libc::IFF_VNET_HDR as i16;
         for &fd in &fds {
             unsafe { tunsetiff(fd, &req as *const _ as _) }?;
+            let ret = unsafe { libc::ioctl(fd, libc::TUNSETOFFLOAD, libc::TUN_F_CSUM) };
+            if ret == -1 {
+                panic!("{:?}", std::io::Error::last_os_error());
+            }
         }
         Ok(Interface {
             fds,
