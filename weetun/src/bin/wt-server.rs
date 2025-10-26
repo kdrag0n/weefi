@@ -1,4 +1,4 @@
-use std::{collections::HashMap, net::{Ipv4Addr, SocketAddr, SocketAddrV4}, process::Command, sync::Arc, time::{Duration, Instant}};
+use std::{collections::{BTreeSet, HashMap}, net::{Ipv4Addr, SocketAddr, SocketAddrV4}, process::Command, sync::Arc, time::{Duration, Instant}};
 use socket2::{Domain, SockAddr, Type};
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::UdpSocket, sync::Mutex};
 use tokio_tun::Tun;
@@ -7,6 +7,19 @@ const CONN_TIMEOUT: Duration = Duration::from_secs(1 * 60); // 1 hour
 
 struct ActiveConnection {
     last_time: Instant,
+}
+
+#[cfg(debug_assertions)]
+macro_rules! debug_println {
+    ($($args:tt)*) => {
+        println!($($args)*)
+    };
+}
+
+#[cfg(not(debug_assertions))]
+macro_rules! debug_println {
+    ($($args:tt)*) => {
+    };
 }
 
 #[tokio::main]
@@ -26,7 +39,7 @@ async fn main() {
         .pop()
         .unwrap();
 
-    println!("tun created: {:?}", tun.name());
+    debug_println!("tun created: {:?}", tun.name());
 
     std::fs::write(format!("/proc/sys/net/ipv6/conf/{}/disable_ipv6", tun.name()), "1").unwrap();
 
@@ -46,6 +59,8 @@ async fn main() {
     let udp_listener_clone = udp_listener.clone();
     let active_connections = Arc::new(Mutex::new(HashMap::new()));
     let active_connections_clone = active_connections.clone();
+    let received_ids = Arc::new(Mutex::new(BTreeSet::<u64>::new()));
+    let received_ids_clone = received_ids.clone();
     tokio::spawn(async move {
         let mut buf = [0u8; 2048];
         loop {
@@ -58,18 +73,29 @@ async fn main() {
                 buf[i] ^= 0x55;
             }
 
-            match tun_writer.write(&buf[..n]).await {
-                Ok(_) => println!("wrote {} bytes from {:?} to tun", n, addr),
-                Err(e) => println!("FAILED To write {} bytes from {:?} to tun: {:?}", n, addr, e)
+            let id_bytes = buf[0..8].try_into().unwrap();
+            let id = u64::from_le_bytes(id_bytes);
+            if id == 0 {
+                received_ids_clone.lock().await.clear();
+            }
+            if received_ids_clone.lock().await.contains(&id) {
+                continue;
+            }
+            received_ids_clone.lock().await.insert(id);
+
+            match tun_writer.write(&buf[8..n]).await {
+                Ok(_) => debug_println!("wrote {} bytes from {:?} to tun", n, addr),
+                Err(e) => debug_println!("FAILED To write {} bytes from {:?} to tun: {:?}", n, addr, e)
             }
         }
     });
 
     // reader
     let mut buf = [0u8; 2048];
+    let mut packet_id: u64 = 0;
     loop {
         let n = tun_reader.read(&mut buf).await.unwrap();
-        println!("reading {} bytes: {:?}", n, &buf[..n]);
+        debug_println!("reading {} bytes: {:?}", n, &buf[..n]);
 
         // send it to every active conn 
         let map = active_connections.lock().await;
@@ -78,13 +104,17 @@ async fn main() {
                 continue;
             }
 
+            buf[0..8].copy_from_slice(&packet_id.to_le_bytes());
+            packet_id += 1;
+
+            // encrypt
             for i in 0..n {
                 buf[i] ^= 0x55;
             }
 
             match udp_listener.send_to(&buf[..n], addr).await {
-                Ok(n) => println!("sent {} bytes to {:?}", n, addr),
-                Err(e) => println!("FAILED To send {} bytes to {:?}: {:?}", n, addr, e)
+                Ok(n) => debug_println!("sent {} bytes to {:?}", n, addr),
+                Err(e) => debug_println!("FAILED To send {} bytes to {:?}: {:?}", n, addr, e)
             }
         }
     }
