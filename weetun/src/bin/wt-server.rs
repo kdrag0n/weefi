@@ -39,7 +39,7 @@ async fn main() {
         .pop()
         .unwrap();
 
-    debug_println!("tun created: {:?}", tun.name());
+        println!("tun created: {:?}", tun.name());
 
     std::fs::write(format!("/proc/sys/net/ipv6/conf/{}/disable_ipv6", tun.name()), "1").unwrap();
 
@@ -85,7 +85,7 @@ async fn main() {
 
             match tun_writer.write(&buf[8..n]).await {
                 Ok(_) => debug_println!("wrote {} bytes from {:?} to tun", n, addr),
-                Err(e) => debug_println!("FAILED To write {} bytes from {:?} to tun: {:?}", n, addr, e)
+                Err(e) => println!("FAILED To write {} bytes from {:?} to tun: {:?}", n, addr, e)
             }
         }
     });
@@ -114,7 +114,7 @@ async fn main() {
 
             match udp_listener.send_to(&buf[..n], addr).await {
                 Ok(n) => debug_println!("sent {} bytes to {:?}", n, addr),
-                Err(e) => debug_println!("FAILED To send {} bytes to {:?}: {:?}", n, addr, e)
+                Err(e) => println!("FAILED To send {} bytes to {:?}: {:?}", n, addr, e)
             }
         }
     }
