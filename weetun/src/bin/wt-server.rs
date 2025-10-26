@@ -79,9 +79,12 @@ async fn main() {
                 received_ids_clone.lock().await.clear();
             }
             if received_ids_clone.lock().await.contains(&id) {
+                debug_println!("received duplicate packet id {} from {:?}: {:?}", id, addr, &buf[8..n]);
                 continue;
             }
             received_ids_clone.lock().await.insert(id);
+
+            debug_println!("received {} bytes with packet id {} from {:?}: {:?}", n, id, addr, &buf[8..n]);
 
             match tun_writer.write(&buf[8..n]).await {
                 Ok(_) => debug_println!("wrote {} bytes from {:?} to tun", n, addr),
