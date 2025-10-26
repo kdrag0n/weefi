@@ -73,6 +73,10 @@ async fn main() {
             loop {
                 match socket.recv(&mut buf).await {
                     Ok(n) => {
+                        for i in 0..n {
+                            buf[i] ^= 0x55;
+                        }
+
                         println!("received {} bytes on interface {}: {:?}", n, interface, &buf[..n]);
 
                         match tun_writer_clone.lock().await.write(&buf[..n]).await {
@@ -93,6 +97,10 @@ async fn main() {
     loop {
         let n = tun_reader.read(&mut buf).await.unwrap();
         println!("reading {} bytes: {:?}", n, &buf[..n]);
+
+        for i in 0..n {
+            buf[i] ^= 0x55;
+        }
 
         for (interface_name, socket) in &udp_sockets {
             match socket.send(&buf[..n]).await {

@@ -53,6 +53,10 @@ async fn main() {
                 last_time: Instant::now()
             });
 
+            for i in 0..n {
+                buf[i] ^= 0x55;
+            }
+
             match tun_writer.write(&buf[..n]).await {
                 Ok(_) => println!("wrote {} bytes from {:?} to tun", n, addr),
                 Err(e) => println!("FAILED To write {} bytes from {:?} to tun: {:?}", n, addr, e)
@@ -71,6 +75,10 @@ async fn main() {
         for (addr, conn_info) in map.iter() {
             if Instant::now().duration_since(conn_info.last_time) > CONN_TIMEOUT {
                 continue;
+            }
+
+            for i in 0..n {
+                buf[i] ^= 0x55;
             }
 
             match udp_listener.send_to(&buf[..n], addr).await {
