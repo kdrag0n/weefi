@@ -92,11 +92,6 @@ async fn main() {
             loop {
                 match socket.recv(&mut buf).await {
                     Ok(n) => {
-                        // decrypt
-                        for i in 0..n {
-                            buf[i] ^= 0x55;
-                        }
-
                         let id_bytes = buf[0..8].try_into().unwrap();
                         let id = u64::from_le_bytes(id_bytes);
                         if id == 0 {
@@ -133,11 +128,6 @@ async fn main() {
 
         buf[0..8].copy_from_slice(&packet_id.to_le_bytes());
         packet_id += 1;
-
-        // encrypt
-        for i in 0..n {
-            buf[i] ^= 0x55;
-        }
 
         for (interface_name, socket) in &udp_sockets {
             match socket.send(&buf[..n+8]).await {
