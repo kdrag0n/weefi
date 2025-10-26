@@ -2,6 +2,7 @@ use std::{collections::{BTreeSet, HashMap}, net::{Ipv4Addr, SocketAddr, SocketAd
 use socket2::{Domain, SockAddr, Type};
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::UdpSocket, sync::Mutex};
 use tokio_tun::Tun;
+use futures::StreamExt;
 
 const CONN_TIMEOUT: Duration = Duration::from_secs(1 * 60); // 1 hour
 
@@ -91,9 +92,10 @@ async fn main() {
     });
 
     // reader
-    let mut buf = [0u8; 2048];
+    //let mut buf = [0u8; 2048];
     let mut packet_id: u64 = 0;
     loop {
+        let mut buf = vec![0u8; 2048];
         let n = tun_reader.read(&mut buf[8..]).await.unwrap();
         debug_println!("reading {} bytes: {:?}", n, &buf[8..n+8]);
 
@@ -102,16 +104,31 @@ async fn main() {
 
         // send it to every active conn 
         let map = active_connections.lock().await;
+
+        let buf = Arc::new(buf);
+        let mut futs = futures::stream::FuturesUnordered::new();
         for (addr, conn_info) in map.iter() {
             if Instant::now().duration_since(conn_info.last_time) > CONN_TIMEOUT {
                 continue;
             }
 
-            match udp_listener.send_to(&buf[..n+8], addr).await {
-                Ok(n) => debug_println!("sent {} bytes with packet id {} to {:?}", n, packet_id, addr),
-                Err(e) => println!("FAILED To send {} bytes to {:?}: {:?}", n, addr, e)
-            }
+            let buf = buf.clone();
+            let udp_listener = udp_listener.clone();
+            let addr = addr.clone();
+            futs.push(async move {
+                udp_listener.send_to(&buf[..n+8], addr).await
+            });
         }
+
+        tokio::task::spawn(async move {
+            while let Some(res) = futs.next().await {
+                match res {
+                    Ok(n) => debug_println!("sent {} bytes with packet id {} to idk", n, packet_id),
+                    Err(e) => println!("FAILED To send {} bytes to {:?}: idk", n, e)
+                }
+            }
+        });
+
     }
 }
 

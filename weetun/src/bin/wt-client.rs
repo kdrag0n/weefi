@@ -1,7 +1,9 @@
 use std::{collections::BTreeSet, net::{Ipv4Addr, SocketAddr, SocketAddrV4}, process::Command, sync::Arc};
 use socket2::{Domain, SockAddr, Type};
-use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::UdpSocket, sync::Mutex};
+use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::UdpSocket, sync::Mutex, task};
 use tokio_tun::Tun;
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
 
 const INTERFACES: &[&str] = &[
     // on orbstack test
@@ -121,17 +123,31 @@ async fn main() {
     }
 
     // reader
-    let mut buf = [0u8; 2048];
+    //let mut buf = [0u8; 2048];
     let mut packet_id: u64 = 0;
     loop {
+        let mut buf = vec![0; 2048];
         let n = tun_reader.read(&mut buf[8..]).await.unwrap();
         debug_println!("reading {} bytes: {:?}", n, &buf[8..n+8]);
 
         buf[0..8].copy_from_slice(&packet_id.to_le_bytes());
         packet_id += 1;
+        
+        let mut futs = FuturesUnordered::new();
 
+        let buf = Arc::new(buf);
         for (interface_name, socket) in &udp_sockets {
-            match socket.send(&buf[..n+8]).await {
+            //let vec = Vec::from(&buf[..n+8]);
+            let socket = socket.clone();
+            let buf = buf.clone();
+            futs.push(async move {
+                (socket.send(&buf[..n+8]).await, socket)
+            });
+        }
+
+        task::spawn(async move {
+            while let Some((res, socket)) = futs.next().await {
+            match res {
                 Ok(n) => {
                     debug_println!("sent {} bytes with packet id {} on interface {}: {:?}", n, packet_id, interface_name, &buf[..n+8]);
                 }
@@ -143,7 +159,8 @@ async fn main() {
                     println!("WARN: socket send error: {:?}", e);
                 }
             }
-        }
+            }
+        });
     }
 }
 
