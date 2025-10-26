@@ -26,6 +26,7 @@ macro_rules! debug_println {
 #[tokio::main]
 async fn main() {
     let args = std::env::args().collect::<Vec<_>>();
+    let throughput_mode = std::env::var("FAST").is_ok();
 
     let tun = Tun::builder()
         .name("tunS")
@@ -93,23 +94,41 @@ async fn main() {
     // reader
     let mut buf = [0u8; 2048];
     let mut packet_id: u64 = 0;
+    let mut conns_buf = Vec::new();
     loop {
         let n = tun_reader.read(&mut buf[8..]).await.unwrap();
         debug_println!("reading {} bytes: {:?}", n, &buf[8..n+8]);
 
         buf[0..8].copy_from_slice(&packet_id.to_le_bytes());
-        packet_id += 1;
-
-        // send it to every active conn 
         let map = active_connections.lock().await;
-        for (addr, conn_info) in map.iter() {
-            if Instant::now().duration_since(conn_info.last_time) > CONN_TIMEOUT {
-                continue;
+        if throughput_mode {
+            conns_buf.clear();
+            for (addr, conn_info) in map.iter() {
+                if Instant::now().duration_since(conn_info.last_time) > CONN_TIMEOUT {
+                    continue;
+                }
+                conns_buf.push(*addr);
             }
-
+            let addr = conns_buf[packet_id as usize % conns_buf.len()];
             match udp_listener.send_to(&buf[..n+8], addr).await {
                 Ok(n) => debug_println!("sent {} bytes with packet id {} to {:?}", n, packet_id, addr),
                 Err(e) => println!("FAILED To send {} bytes to {:?}: {:?}", n, addr, e)
+            }
+        }
+
+        packet_id += 1;
+
+        if !throughput_mode {
+            // send it to every active conn 
+            for (addr, conn_info) in map.iter() {
+                if Instant::now().duration_since(conn_info.last_time) > CONN_TIMEOUT {
+                    continue;
+                }
+
+                match udp_listener.send_to(&buf[..n+8], addr).await {
+                    Ok(n) => debug_println!("sent {} bytes with packet id {} to {:?}", n, packet_id, addr),
+                    Err(e) => println!("FAILED To send {} bytes to {:?}: {:?}", n, addr, e)
+                }
             }
         }
     }
