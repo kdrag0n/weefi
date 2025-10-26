@@ -130,7 +130,7 @@ async fn main() {
         buf[0..8].copy_from_slice(&packet_id.to_le_bytes());
         packet_id += 1;
 
-        let (interface_name, socket) = udp_sockets[packet_id % udp_sockets.len()];
+        let (interface_name, socket) = &udp_sockets[packet_id as usize % udp_sockets.len()];
         match socket.send(&buf[..n+8]).await {
             Ok(n) => {
                 debug_println!("sent {} bytes with packet id {} on interface {}: {:?}", n, packet_id, interface_name, &buf[..n+8]);
