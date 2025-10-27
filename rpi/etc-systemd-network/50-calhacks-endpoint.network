@@ -1,0 +1,8 @@
+[Match]
+Name=enxa0cec8be0a8f
+
+[Link]
+ActivationPolicy=always-up
+
+[Network]
+Bridge=br0

@@ -1,0 +1,5 @@
+[Match]
+Name=wlx*
+
+[Network]
+DHCP=yes
